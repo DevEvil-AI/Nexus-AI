@@ -85,7 +85,7 @@ This guide will help you set up, configure, and use the server for your projects
 
 1. Clone this repository:
    ```bash
-   https://github.com/DevEvil-AI/Nexus-AI.git
+   git clone https://github.com/DevEvil-AI/Nexus-AI.git
    cd Nexus-AI
    ```
 
