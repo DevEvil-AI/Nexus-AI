@@ -1,6 +1,6 @@
 # **Nexus AI**
 
-This repository enables you to host a powerful AI backend that supports chat and image generation using **xAI/OpenAI** for conversational AI and **FLUX** for advanced image generation. 
+This repository enables you to host a powerful AI backend that supports chat and image generation using **xAI/OpenAI** for conversational and reasoning AI and **FLUX** for advanced image generation. 
 
 This guide will help you set up, configure, and use the server for your projects.
 
@@ -26,15 +26,17 @@ This guide will help you set up, configure, and use the server for your projects
 3. [Repository Structure](#repository-structure)  
 4. [Features](#features)  
    - Chat API  
+   - Reasoning API  
    - Image Generation API  
    - FTP Integration  
 5. [Setup Guide](#setup-guide)  
    - [Prerequisites](#1-prerequisites)  
    - [Installation](#2-installation)  
    - [Run the Server](#3-run-the-server)  
-6. [How to Use OpenAI Instead of xAI](#how-to-use-openai-instead-of-xai)  
+6. [How to Use xAI Instead of OpenAI](#how-to-use-xai-instead-of-openai)  
 7. [Usage](#usage)  
    - [Chat API](#chat-api)  
+   - [Reasoning API](#reasoning-api)  
    - [Image Generation API](#image-generation-api)  
 8. [How to Integrate in Your Project](#how-to-integrate-in-your-project)  
 9. [Environment Variables](#environment-variables)  
@@ -61,10 +63,13 @@ This guide will help you set up, configure, and use the server for your projects
 1. **Chat API**  
    A conversational AI model powered by xAI or OpenAI to generate intelligent and context-aware responses.
 
-2. **Image Generation API**  
+2. **Reasoning API**  
+   A reasoning AI model powered by xAI or OpenAI that thinks longer and generates detailed and more accurate responses.
+
+3. **Image Generation API**  
    Generate images based on user prompts using the FLUX model.
 
-3. **FTP Integration**  
+4. **FTP Integration**  
    Images are securely stored on an FTP server and accessible via a URL.
 
 ---
@@ -121,41 +126,51 @@ Server is running on http://localhost:5500
 
 ---
 
-### **How to Use OpenAI Instead of xAI**  
+### **How to Use xAI Instead of OpenAI**  
 
-If you'd like to switch from xAI to OpenAI for your project, follow these steps:  
+If you'd like to switch from OpenAI to xAI for your project, follow these steps:  
 
-1. **Remove the `baseURL` Property**  
-   In the `const openai` declaration, remove the `baseURL` property:  
+1. **Add `baseURL` Property**  
+   In the `const openai` declaration, add `baseURL` property:  
    ```javascript
    const openai = new OpenAI({
-       apiKey: process.env.XAI_API_KEY, // Replace with your OpenAI API key
+       apiKey: process.env.OPENAI_API_KEY, // Replace with your xAI API key
+       baseURL: "https://api.x.ai/v1" // Base URL for the xAI API
    });
    ```  
 
 2. **Replace the API Key**  
-   - Update the `apiKey` value to use your OpenAI API key.  
-   - Alternatively, you can create a separate environment variable for the OpenAI API key, e.g., `OPENAI_API_KEY`, and reference it in your code:  
+   - Update the `apiKey` value to use your xAI API key.  
      ```javascript
      const openai = new OpenAI({
-         apiKey: process.env.OPENAI_API_KEY, // Use the OpenAI API key from the environment variable
+         apiKey: process.env.XAI_API_KEY, // Use the xAI API key from the environment variable
+         baseURL: "https://api.x.ai/v1"
      });
      ```  
 
-3. **Update the Model**  
-   In the `chatCompletion` section, change the model to one of OpenAI's chat models, such as `gpt-4o`:  
+3. **Update the Models**  
+   - Chat model: In the `chatCompletion` section for chat model, change the model to one of xAI's chat models, such as `grok-3`:  
    ```javascript
    const chatCompletion = await openai.chat.completions.create({
-       model: "gpt-4o", // Use OpenAI's chat model
+       model: "grok-3", // Use xAI's chat model
        messages: conversationHistory,
-       temperature: 0,
-       max_tokens: 1024,
+       max_tokens: 1024
    });
    ```  
+   - Reasoning model: In the `chatCompletion` section for reasoning model, change the model to one of xAI's reasoning models, such as `grok-3-mini`:  
+   ```javascript
+   const chatCompletion = await openai.chat.completions.create({
+        model: "grok-3-mini",
+        messages: conversationHistory,
+        reasoning_effort: "low"
+   });
+   ``` 
+> [!NOTE]  
+> xAI's reasoning models currently are ``grok-4``, ``grok-3-mini``, and ``grok-3-mini-fast``. Check [xAI's reasoning guide](https://docs.x.ai/docs/guides/reasoning) for more info. 
+
 
 4. **Save and Test**  
-   Save the changes and test your server to ensure it functions correctly with OpenAI.  
-
+   Save the changes and test your server to ensure it functions correctly with xAI.  
 ---
 
 ## **Usage**
@@ -184,6 +199,35 @@ If you'd like to switch from xAI to OpenAI for your project, follow these steps:
 ```json
 {
   "botResponse": "I'm great! How can I assist you today?"
+}
+```
+
+---
+
+### **Reasoning API**
+
+**Endpoint:**  
+`POST http://localhost:5500/chat`
+
+**Headers:**
+```json
+{
+  "Content-Type": "application/json"
+}
+```
+
+**Body:**
+```json
+{
+  "userMessage": "Reason what came first, the egg or the chicken?",
+  "userId": "unique_user_id"
+}
+```
+
+**Response:**
+```json
+{
+  "botResponse": "The egg came first, but it wasn’t laid by a chicken. It was laid by a bird that was almost, but not quite, a chicken." // This a summary answer, reasoning answers are detailed and long
 }
 ```
 
