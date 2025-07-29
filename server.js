@@ -1,29 +1,28 @@
-// Import required modules
-const express = require('express'); // Framework for building web servers
+const express = require('express');
 const {
   HfInference
-} = require('@huggingface/inference'); // Hugging Face inference API
-const bodyParser = require('body-parser'); // Middleware to parse request bodies
-const cors = require('cors'); // Middleware to handle Cross-Origin Resource Sharing
-const fetch = require('node-fetch'); // HTTP client for making API requests
-const ftp = require('basic-ftp'); // FTP client for file uploads
+} = require('@huggingface/inference');
+const bodyParser = require('body-parser');
+const cors = require('cors');
+const fetch = require('node-fetch');
+const ftp = require('basic-ftp');
 const {
   Readable
-} = require('stream'); // Stream utilities for handling buffers
-require("dotenv").config(); // Load environment variables from .env file
-const OpenAI = require("openai"); // OpenAI client for interacting with xAI
+} = require('stream');
+require("dotenv").config();
+const OpenAI = require("openai");
 const {
   env
-} = require('process'); // Access environment variables
+} = require('process');
 
-// Initialize the Express app
+
 const app = express();
-const PORT = 5500; // Port number for the server
+const PORT = 5500;
 
-// Allowed origins for CORS
+
 const allowedOrigins = ['http://localhost', 'https://example.com'];
 
-// Middleware to handle CORS
+
 app.use((req, res, next) => {
   const origin = req.headers.origin;
   if (allowedOrigins.includes(origin)) {
@@ -34,7 +33,7 @@ app.use((req, res, next) => {
   next();
 });
 
-// Handle preflight OPTIONS requests
+
 app.options('*', (req, res) => {
   const origin = req.headers.origin;
   if (allowedOrigins.includes(origin)) {
@@ -45,91 +44,108 @@ app.options('*', (req, res) => {
   res.sendStatus(200);
 });
 
-// Parse incoming JSON requests
+
 app.use(express.json());
 
-// API endpoint for the FLUX image generation model
+
 const fluxModelAPI = "https://api-inference.huggingface.co/models/black-forest-labs/FLUX.1-dev";
 
-// OpenAI xAI configuration
+
 const openai = new OpenAI({
-  apiKey: process.env.XAI_API_KEY, // API key for authentication
-  baseURL: "https://api.x.ai/v1", // Base URL for the xAI API
+  apiKey: process.env.XAI_API_KEY
 });
 
-// FTP configuration for image uploads
+
 const ftpConfig = {
-  host: '', // FTP server hostname
-  user: '', // FTP username
-  password: '', // FTP password
-  port: '', // FTP port
-  secure: true // Enable secure FTP
+  host: '',
+  user: '',
+  password: '',
+  port: '',
+  secure: true
 };
 
-// Store user conversation history
+
 const userConversations = {};
 
-// Chat endpoint to handle user messages
+
 app.post('/chat', async (req, res) => {
   const {
     userMessage,
     userId
-  } = req.body; // Extract user message and ID
+  } = req.body;
 
-  // Validate input
+
   if (!userMessage || !userId) {
     return res.status(400).json({
       error: 'No user message or user ID provided'
     });
   }
 
-  // Initialize conversation history for new users
+
   if (!userConversations[userId]) {
     userConversations[userId] = [{
       role: "system",
-      content: `You are an AI assistant developed and powered by DevEvil Universe` // Give AI instructions
+      content: `You are an AI assistant that helps users with their needs and questions` // A system prompt and instructions for the AI
     }];
   }
 
-  const conversationHistory = userConversations[userId]; // Retrieve conversation history
+  const conversationHistory = userConversations[userId];
 
   try {
-    let botResponse = ''; // Initialize bot response
+    let botResponse = '';
 
-    // Add user message to conversation history
+
     conversationHistory.push({
       role: 'user',
       content: userMessage
     });
 
-    // Check if the message is a request for image generation
+
     const lowerCaseMessage = userMessage.toLowerCase();
+
+    // Image Generation
     if (lowerCaseMessage.startsWith('create an image') || lowerCaseMessage.startsWith('imagine') || lowerCaseMessage.startsWith('generate an image')) {
       const prompt = userMessage.replace(/create an image|imagine|generate an image/i, '').trim();
-      const imageUrl = await generateImage(prompt, userId); // Generate image
+      const imageUrl = await generateImage(prompt, userId);
 
-      // Prepare bot response with the generated image or an error message
-      botResponse = imageUrl ? `<img class="ai-image" src="${imageUrl}" alt="Generated Image" />` :
-        `<div class='error'>Oops! Something went wrong. <br> Please try again, and if the issue persists, feel free to reach out to us for support. Join our Discord community at <a href="https://dsc.gg/devevil">https://dsc.gg/devevil</a> to report the problem, and we'll get it sorted out as soon as possible!</div>`;
-    } else {
-      // Generate chat response using xAI
+
+      botResponse = imageUrl ? `<img class="ai-image" src="${imageUrl}" alt="Generated Image" />` : `Oops! Something went wrong. Please try again, and if the issue persists.`;
+    }
+    // Reasoning, You can change the way it works and triggers, this is just how it works
+    else if (lowerCaseMessage.startsWith('reason')) {
+
       const chatCompletion = await openai.chat.completions.create({
-        model: "grok-2-1212", // Chat model
+        model: "o3-mini",
         messages: conversationHistory,
-        temperature: 0, // Adjusts response randomness
-        max_tokens: 1024 // Maximum response length
+        reasoning_effort: "low"
       });
 
-      botResponse += chatCompletion.choices[0].message.content || ''; // Extract response content
+      botResponse += chatCompletion.choices[0].message.content || '';
+
+      conversationHistory.push({
+        role: 'assistant',
+        content: botResponse
+      });
+    }
+    // Chatting
+    else {
+
+      const chatCompletion = await openai.chat.completions.create({
+        model: "gpt-4.1-nano",
+        messages: conversationHistory,
+        max_tokens: 1024
+      });
+
+      botResponse += chatCompletion.choices[0].message.content || '';
     }
 
-    // Add bot response to conversation history
+
     conversationHistory.push({
       role: 'assistant',
       content: botResponse
     });
 
-    // Send response to the user
+
     res.json({
       botResponse
     });
@@ -141,15 +157,14 @@ app.post('/chat', async (req, res) => {
   }
 });
 
-// Function to generate an image
+
 async function generateImage(prompt, userId) {
-  const controller = new AbortController(); // Abort controller for timeout
+  const controller = new AbortController();
   const timeout = setTimeout(() => {
-    controller.abort(); // Abort the request after timeout
+    controller.abort();
   }, 10000);
 
   try {
-    // Send request to the FLUX model API
     const response = await fetch(fluxModelAPI, {
       headers: {
         Authorization: `Bearer ${process.env.HUGGING_FACE_API_KEY}`,
@@ -162,18 +177,16 @@ async function generateImage(prompt, userId) {
       signal: controller.signal,
     });
 
-    clearTimeout(timeout); // Clear timeout after response
+    clearTimeout(timeout);
 
-    const arrayBuffer = await response.arrayBuffer(); // Get response as buffer
+    const arrayBuffer = await response.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
-    const imageName = `${userId}-${Date.now()}-${prompt}.png`; // Generate unique image name
+    const imageName = `${userId}-${Date.now()}-${prompt}.png`;
 
-    // Create a readable stream from the buffer
     const readableStream = new Readable();
     readableStream.push(buffer);
     readableStream.push(null);
 
-    // Upload image to FTP server
     const ftpClient = new ftp.Client();
     try {
       await ftpClient.access(ftpConfig);
@@ -182,17 +195,17 @@ async function generateImage(prompt, userId) {
       console.error('FTP upload error:', err);
       return null;
     } finally {
-      ftpClient.close(); // Close FTP connection
+      ftpClient.close();
     }
 
-    return `https://[your_domain]/${imageName}`; // Return image URL
+    // Change "[your_domain]" to the domain of your FTP where images are hosted on
+    return `https://[your_domain]/${imageName}`;
   } catch (error) {
     console.error('Error generating image:', error);
     return null;
   }
 }
 
-// Start the server
 app.listen(PORT, () => {
   console.log(`Server is running on http://localhost:${PORT}`);
 });
