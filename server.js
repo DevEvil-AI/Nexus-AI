@@ -131,9 +131,11 @@ app.post('/chat', async (req, res) => {
     else {
 
       const chatCompletion = await openai.chat.completions.create({
-        model: "gpt-4.1-nano",
+        model: "gpt-5",
         messages: conversationHistory,
-        max_tokens: 1024
+        temperature: 1,
+        max_completion_tokens: 2048,
+        reasoning_effort: "low"
       });
 
       botResponse += chatCompletion.choices[0].message.content || '';
