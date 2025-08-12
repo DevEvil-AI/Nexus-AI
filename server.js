@@ -47,10 +47,6 @@ app.options('*', (req, res) => {
 
 app.use(express.json());
 
-
-const fluxModelAPI = "https://api-inference.huggingface.co/models/black-forest-labs/FLUX.1-dev";
-
-
 const openai = new OpenAI({
   apiKey: process.env.XAI_API_KEY
 });
@@ -164,26 +160,55 @@ async function generateImage(prompt, userId) {
   const controller = new AbortController();
   const timeout = setTimeout(() => {
     controller.abort();
-  }, 10000);
+  }, 60000);
 
   try {
-    const response = await fetch(fluxModelAPI, {
+    if (!prompt || typeof prompt !== 'string' || prompt.trim() === '') {
+      throw new Error('Invalid or empty prompt provided for image generation.');
+    }
+
+    const response = await fetch('https://router.huggingface.co/together/v1/images/generations', {
       headers: {
         Authorization: `Bearer ${process.env.HUGGING_FACE_API_KEY}`,
-        "Content-Type": "application/json",
+        'Content-Type': 'application/json',
       },
-      method: "POST",
+      method: 'POST',
       body: JSON.stringify({
-        inputs: prompt
+        prompt: prompt,
+        response_format: 'base64',
+        model: 'black-forest-labs/FLUX.1-Krea-dev',
       }),
       signal: controller.signal,
     });
 
     clearTimeout(timeout);
 
-    const arrayBuffer = await response.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-    const imageName = `${userId}-${Date.now()}-${prompt}.png`;
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => 'Unable to read error response body');
+      console.error('Image generation API error:', {
+        status: response.status,
+        statusText: response.statusText,
+        responseBody: errorText,
+        prompt,
+        userId,
+      });
+      throw new Error(`Failed to fetch image from API: ${response.status} ${response.statusText} - ${errorText}`);
+    }
+
+    const result = await response.json();
+    if (!result.data || !result.data[0] || !result.data[0].b64_json) {
+      console.error('Invalid API response format:', {
+        response: result,
+        prompt,
+        userId,
+      });
+      throw new Error('Invalid API response: Missing base64 image data.');
+    }
+
+    const base64Data = result.data[0].b64_json;
+    const buffer = Buffer.from(base64Data, 'base64');
+
+    const imageName = `${userId}-${Date.now()}-${prompt.replace(/[^a-zA-Z0-9]/g, '_')}.png`;
 
     const readableStream = new Readable();
     readableStream.push(buffer);
@@ -194,8 +219,12 @@ async function generateImage(prompt, userId) {
       await ftpClient.access(ftpConfig);
       await ftpClient.uploadFrom(readableStream, `/${imageName}`);
     } catch (err) {
-      console.error('FTP upload error:', err);
-      return null;
+      console.error('FTP upload error:', {
+        error: err.message,
+        imageName,
+        userId,
+      });
+      throw new Error(`FTP upload failed: ${err.message}`);
     } finally {
       ftpClient.close();
     }
@@ -203,7 +232,21 @@ async function generateImage(prompt, userId) {
     // Change "[your_domain]" to the domain of your FTP where images are hosted on
     return `https://[your_domain]/${imageName}`;
   } catch (error) {
-    console.error('Error generating image:', error);
+    if (error.name === 'AbortError') {
+      console.error('Image generation timed out:', {
+        prompt,
+        userId,
+        timeout: '60 seconds',
+      });
+      throw new Error('Image generation request timed out after 60 seconds.');
+    }
+
+    console.error('Error generating image:', {
+      error: error.message,
+      prompt,
+      userId,
+      stack: error.stack,
+    });
     return null;
   }
 }
