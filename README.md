@@ -106,7 +106,7 @@ This guide will help you set up, configure, and use the server for your projects
 
 4. Fill in the `.env` file with your credentials:
    ```env
-   XAI_API_KEY=your_xai_api_key
+   OPENAI_API_KEY=your_xai_api_key
    HUGGING_FACE_API_KEY=your_hugging_face_api_key
    ```
 
